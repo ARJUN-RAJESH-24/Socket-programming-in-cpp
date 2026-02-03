@@ -1,24 +1,20 @@
 /**
- * Task 2: Concurrent Client - Multi-Client Chat Application
+ * Task 2: C++ Client for Python Concurrent Server
  *
- * This client connects to the concurrent server and can participate
- * in a group chat with other connected clients. Messages from other
- * clients are displayed in real-time.
+ * This client connects to a Python chat server and participates in group chat.
+ * Compatible with Python socket server using threading.
  *
  * Compile (Windows): g++ -o client.exe client.cpp -lws2_32
- * Compile (Linux):   g++ -o client client.cpp -pthread
  *
  * Course: 23CSE312 - Distributed Systems
  * Lab: Socket Programming (Concurrent Chat Application)
  */
 
 #ifdef _WIN32
-// Windows-specific headers for socket programming
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 #else
-// Linux/Unix-specific headers for socket programming
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -32,26 +28,23 @@
 #include <atomic>
 #include <cstring>
 #include <iostream>
+#include <string>
 #include <thread>
 
 
 using namespace std;
 
-// Server configuration - modify these for cross-system testing
-const char *SERVER_IP =
-    "127.0.0.1"; // Change to server's IP for network testing
-const int SERVER_PORT = 8080;
+// ============ CONFIGURATION - CHANGE THESE ============
+const char *SERVER_IP = "10.105.10.247";     // Your friend's server IP
+const int SERVER_PORT = 12345;               // Python server port
+const char *MY_NAME = "Arjun Rajesh: 23208"; // Your name
+// =======================================================
 
-// Global flag for thread synchronization
 atomic<bool> running(true);
 
 /**
  * Function: receiveMessages
- * Purpose: Continuously receives messages from the server
- * Parameters: sock - The socket descriptor for communication
- *
- * This function runs in a separate thread and displays incoming
- * messages from the server (including messages from other clients).
+ * Continuously receives messages from the Python server
  */
 void receiveMessages(SOCKET sock) {
   char buffer[1024];
@@ -59,71 +52,70 @@ void receiveMessages(SOCKET sock) {
   while (running) {
     memset(buffer, 0, sizeof(buffer));
 
-    // Receive data from server
     int bytesRead = recv(sock, buffer, sizeof(buffer) - 1, 0);
 
     if (bytesRead <= 0) {
       if (running) {
-        cout << "\n[Client] Disconnected from server." << endl;
+        cout << "\n[Disconnected from server]" << endl;
       }
       running = false;
       break;
     }
 
     buffer[bytesRead] = '\0';
-    cout << "\n" << buffer << endl; // Display the message
-    cout << "[You]: " << flush;     // Restore prompt
+    cout << "\r" << buffer << endl;
+    cout << "-> " << flush;
   }
 }
 
 /**
  * Function: sendMessages
- * Purpose: Continuously sends messages to the server
- * Parameters: sock - The socket descriptor for communication
- *
- * This function runs in a separate thread and reads user input
- * to send messages. Type "exit" to disconnect.
+ * Sends messages to the Python server with name prefix
  */
 void sendMessages(SOCKET sock) {
-  char buffer[1024];
+  string input;
 
   while (running) {
-    cout << "[You]: " << flush;
-    cin.getline(buffer, sizeof(buffer));
+    cout << "-> " << flush;
+    getline(cin, input);
 
     if (!running)
       break;
 
-    // Check for exit command
-    if (strcmp(buffer, "exit") == 0) {
-      cout << "[Client] Disconnecting from chat..." << endl;
+    if (input == "exit" || input == "EXIT") {
+      // Send exit message with name
+      string exitMsg = string(MY_NAME) + " has left the chat.";
+      send(sock, exitMsg.c_str(), exitMsg.length(), 0);
+      cout << "[Disconnecting...]" << endl;
       running = false;
       break;
     }
 
-    // Only send if there's actual content
-    if (strlen(buffer) > 0) {
-      send(sock, buffer, strlen(buffer), 0);
+    if (!input.empty()) {
+      // Format: "Arjun Rajesh: 23208: message"
+      string fullMessage = string(MY_NAME) + ": " + input;
+      send(sock, fullMessage.c_str(), fullMessage.length(), 0);
     }
   }
 }
 
 int main() {
   cout << "==========================================" << endl;
-  cout << "   Task 2: Concurrent Client (Multi-Chat)" << endl;
+  cout << "  C++ Client for Python Chat Server      " << endl;
   cout << "==========================================" << endl;
+  cout << "Name: " << MY_NAME << endl;
+  cout << "Server: " << SERVER_IP << ":" << SERVER_PORT << endl;
+  cout << "------------------------------------------" << endl;
 
 #ifdef _WIN32
-  // Initialize Winsock (Windows only)
   WSADATA wsaData;
   if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
     cerr << "[Error] WSAStartup failed!" << endl;
     return 1;
   }
-  cout << "[Client] Winsock initialized successfully." << endl;
 #endif
 
-  // Step 1: Create a TCP socket
+  // Create TCP socket
   SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, 0);
   if (clientSocket == INVALID_SOCKET) {
     cerr << "[Error] Failed to create socket!" << endl;
@@ -132,15 +124,13 @@ int main() {
 #endif
     return 1;
   }
-  cout << "[Client] Socket created successfully." << endl;
 
-  // Step 2: Configure server address
+  // Configure server address
   sockaddr_in serverAddress;
   memset(&serverAddress, 0, sizeof(serverAddress));
   serverAddress.sin_family = AF_INET;
   serverAddress.sin_port = htons(SERVER_PORT);
 
-  // Convert IP address from text to binary
   if (inet_pton(AF_INET, SERVER_IP, &serverAddress.sin_addr) <= 0) {
     cerr << "[Error] Invalid server address: " << SERVER_IP << endl;
     closesocket(clientSocket);
@@ -150,14 +140,13 @@ int main() {
     return 1;
   }
 
-  cout << "[Client] Connecting to " << SERVER_IP << ":" << SERVER_PORT << "..."
+  cout << "[Connecting to " << SERVER_IP << ":" << SERVER_PORT << "...]"
        << endl;
 
-  // Step 3: Connect to server
+  // Connect to Python server
   if (connect(clientSocket, (sockaddr *)&serverAddress,
               sizeof(serverAddress)) == SOCKET_ERROR) {
-    cerr << "[Error] Connection failed! Make sure the server is running."
-         << endl;
+    cerr << "[Error] Connection failed! Is the server running?" << endl;
     closesocket(clientSocket);
 #ifdef _WIN32
     WSACleanup();
@@ -165,33 +154,28 @@ int main() {
     return 1;
   }
 
-  cout << "[Client] Connected to chat server!" << endl;
+  cout << "--- Connected as " << MY_NAME << " ---" << endl;
 
-  // Send greeting message automatically upon connection
-  const char *greeting = "Arjun Rajesh -23208 here!";
-  send(clientSocket, greeting, strlen(greeting), 0);
-  cout << "[Client] Sent greeting: " << greeting << endl;
+  // Send name to server first (required by Python server)
+  send(clientSocket, MY_NAME, strlen(MY_NAME), 0);
 
-  cout << "[Client] Type messages and press Enter to send." << endl;
-  cout << "[Client] Type 'exit' to leave the chat." << endl;
+  cout << "[Type messages and press Enter. Type 'exit' to leave]" << endl;
   cout << "------------------------------------------" << endl;
 
-  // Step 4: Create threads for sending and receiving
+  // Start receive and send threads
   thread recvThread(receiveMessages, clientSocket);
   thread sendThread(sendMessages, clientSocket);
 
-  // Wait for threads to complete
   recvThread.join();
   sendThread.join();
 
-  // Step 5: Clean up
-  cout << "[Client] Closing connection..." << endl;
+  // Cleanup
   closesocket(clientSocket);
 
 #ifdef _WIN32
   WSACleanup();
 #endif
 
-  cout << "[Client] Goodbye!" << endl;
+  cout << "[Client closed]" << endl;
   return 0;
 }
