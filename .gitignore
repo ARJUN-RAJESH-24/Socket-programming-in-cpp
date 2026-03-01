@@ -1,0 +1,27 @@
+# Compiled binaries
+*.o
+*.out
+*.exe
+*.dll
+*.so
+*.dylib
+a.out
+
+# Debug
+*.dSYM/
+*.pdb
+
+# Build directories
+build/
+cmake-build-*/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
